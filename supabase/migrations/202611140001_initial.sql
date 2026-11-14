@@ -1,0 +1,14 @@
+create extension if not exists pgcrypto;
+create table if not exists public.profiles(id uuid primary key references auth.users(id) on delete cascade,display_name text not null default 'Creator',avatar_url text,created_at timestamptz not null default now(),constraint display_name_len check(char_length(display_name) between 1 and 60));
+create table if not exists public.live_streams(id uuid primary key default gen_random_uuid(),creator_id uuid not null references auth.users(id) on delete cascade,creator_name text not null,title text not null,mux_live_stream_id text unique,mux_playback_id text,status text not null default 'created' check(status in('created','live','ended','disabled')),started_at timestamptz,ended_at timestamptz,created_at timestamptz not null default now(),constraint title_len check(char_length(title) between 1 and 120));
+alter table public.profiles enable row level security; alter table public.live_streams enable row level security;
+create policy "authenticated profile read" on public.profiles for select to authenticated using(true);
+create policy "own profile update" on public.profiles for update to authenticated using(auth.uid()=id) with check(auth.uid()=id);
+create policy "own profile insert" on public.profiles for insert to authenticated with check(auth.uid()=id);
+create policy "live catalog" on public.live_streams for select to authenticated using(status='live');
+revoke all on public.live_streams from anon,authenticated;
+grant select(id,title,creator_name,status,started_at) on public.live_streams to authenticated;
+create or replace function public.new_profile() returns trigger language plpgsql security definer set search_path=public as $$ begin insert into public.profiles(id,display_name) values(new.id,coalesce(nullif(new.raw_user_meta_data->>'display_name',''),split_part(new.email,'@',1),'Creator')) on conflict(id) do nothing; return new; end; $$;
+drop trigger if exists auth_user_profile on auth.users;
+create trigger auth_user_profile after insert on auth.users for each row execute procedure public.new_profile();
+revoke insert,update,delete on public.live_streams from anon,authenticated;
