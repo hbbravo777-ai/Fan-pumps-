@@ -1,116 +1,25 @@
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { StatusBar } from "expo-status-bar";
+import React,{useEffect,useState} from "react";
+import {ActivityIndicator,Alert,KeyboardAvoidingView,Platform,Pressable,SafeAreaView,ScrollView,StyleSheet,Text,TextInput,View} from "react-native";
+import * as SecureStore from "expo-secure-store";
+import {StatusBar} from "expo-status-bar";
+import {createClient,Session} from "@supabase/supabase-js";
+import {VideoView,useVideoPlayer} from "expo-video";
+import "react-native-url-polyfill/auto";
 
-type Tab = "Discover" | "Saved" | "Wallet" | "Settings";
-type Creator = { id: string; name: string; category: string; description: string };
-const CREATORS: Creator[] = [
-  { id: "nova", name: "Nova", category: "Music", description: "Independent music and studio sessions." },
-  { id: "kairo", name: "Kairo", category: "Gaming", description: "Gameplay, tutorials and community matches." },
-  { id: "mira", name: "Mira", category: "Art", description: "Illustration, design and creative process." }
-];
-const SAVED_KEY = "extreme-pumps.non-adult.saved.v1";
-
-export default function App() {
-  const [tab, setTab] = useState<Tab>("Discover");
-  const [savedIds, setSavedIds] = useState<string[]>([]);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    AsyncStorage.getItem(SAVED_KEY).then((raw) => {
-      if (!active || !raw) return;
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) {
-        setSavedIds(parsed.filter((id) => CREATORS.some((creator) => creator.id === id)));
-      }
-    }).catch(() => undefined).finally(() => { if (active) setReady(true); });
-    return () => { active = false; };
-  }, []);
-
-  async function toggleSaved(id: string) {
-    const next = savedIds.includes(id) ? savedIds.filter((value) => value !== id) : [...savedIds, id];
-    setSavedIds(next);
-    try { await AsyncStorage.setItem(SAVED_KEY, JSON.stringify(next)); }
-    catch { setSavedIds(savedIds); }
-  }
-
-  const visibleCreators = tab === "Saved" ? CREATORS.filter((c) => savedIds.includes(c.id)) : CREATORS;
-
-  return <SafeAreaView style={styles.safe}>
-    <StatusBar style="light" />
-    <View style={styles.header}>
-      <View><Text style={styles.brand}>EXTREME <Text style={styles.brandAccent}>PUMPS</Text></Text><Text style={styles.edition}>ANDROID · NON-ADULT EDITION</Text></View>
-      <View style={styles.onlinePill}><Text style={styles.onlineText}>BETA SHELL</Text></View>
-    </View>
-    <View style={styles.notice}><Text style={styles.noticeTitle}>Community-first creator content</Text><Text style={styles.noticeText}>Music, gaming, art, education and other non-explicit creator content only.</Text></View>
-    <View style={styles.tabs}>{(["Discover","Saved","Wallet","Settings"] as Tab[]).map((item) =>
-      <Pressable key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.activeTab]}>
-        <Text style={[styles.tabText, tab === item && styles.activeTabText]}>{item}</Text>
-      </Pressable>)}</View>
-    <ScrollView contentContainerStyle={styles.content}>
-      {!ready ? <ActivityIndicator color="#b8ff45" /> : null}
-      {(tab === "Discover" || tab === "Saved") && <>
-        <Text style={styles.heading}>{tab === "Saved" ? "Saved creators" : "Discover creators"}</Text>
-        <Text style={styles.subheading}>Saved creator cards remain available offline on this device.</Text>
-        {visibleCreators.length === 0 ? <Text style={styles.empty}>No saved creators yet. Save a creator from Discover.</Text> : null}
-        {visibleCreators.map((creator) => <View key={creator.id} style={styles.card}>
-          <View style={styles.avatar}><Text style={styles.avatarText}>{creator.name[0]}</Text></View>
-          <View style={styles.creatorInfo}><Text style={styles.creatorName}>{creator.name}</Text><Text style={styles.category}>{creator.category}</Text><Text style={styles.description}>{creator.description}</Text></View>
-          <Pressable onPress={() => toggleSaved(creator.id)} style={styles.saveButton}><Text style={styles.saveText}>{savedIds.includes(creator.id) ? "Saved" : "Save"}</Text></Pressable>
-        </View>)}
-        <Text style={styles.footnote}>Demo creator data only. Live profiles, uploads and streams are not connected.</Text>
-      </>}
-      {tab === "Wallet" && <View style={styles.panel}>
-        <Text style={styles.heading}>Wallet & payments</Text><Text style={styles.subheading}>Solana Devnet is the planned beta network.</Text>
-        <View style={styles.statusBox}><Text style={styles.statusTitle}>Not connected</Text><Text style={styles.description}>Wallet connection and token payments are disabled in this starter build. Never enter a seed phrase or private key into EXTREME PUMPS.</Text></View>
-        <Text style={styles.footnote}>Digital-content purchases remain disabled until Google Play billing and blockchain policy requirements are reviewed and implemented.</Text>
-      </View>}
-      {tab === "Settings" && <View style={styles.panel}>
-        <Text style={styles.heading}>Settings & safety</Text>
-        <Text style={styles.description}>This Android edition is restricted to non-adult content. Explicit sexual content, adult creator discovery and adult-content links are out of scope.</Text>
-        <Text style={styles.description}>Reporting, blocking, creator verification, age-appropriate content controls and account tools must be completed before public release.</Text>
-        <Text style={styles.footnote}>Offline mode stores only the saved creator-card list locally. It does not cache private media, payment credentials or session tokens.</Text>
-      </View>}
-    </ScrollView>
-    <View style={styles.footer}><Text style={styles.footerText}>EXTREME PUMPS · NON-ADULT · DEVELOPMENT BUILD</Text></View>
-  </SafeAreaView>;
+const url=process.env.EXPO_PUBLIC_SUPABASE_URL??"";
+const anon=process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY??"";
+const supabase=url&&anon?createClient(url,anon,{auth:{storage:{getItem:SecureStore.getItemAsync,setItem:SecureStore.setItemAsync,removeItem:SecureStore.deleteItemAsync},persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}}):null;
+type Stream={id:string;title:string;creator_name:string;status:string};
+function Player({uri}:{uri:string}){const player=useVideoPlayer(uri,p=>p.play());return <VideoView player={player} style={{height:230,width:"100%",backgroundColor:"#000"}} nativeControls contentFit="contain"/>}
+export default function App(){
+ const [session,setSession]=useState<Session|null>(null),[ready,setReady]=useState(false),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[name,setName]=useState(""),[register,setRegister]=useState(false),[busy,setBusy]=useState(false),[streams,setStreams]=useState<Stream[]>([]),[uri,setUri]=useState("");
+ useEffect(()=>{if(!supabase){setReady(true);return}let live=true;supabase.auth.getSession().then(({data})=>{if(live){setSession(data.session);setReady(true)}});const {data}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>{live=false;data.subscription.unsubscribe()}},[]);
+ useEffect(()=>{if(!session||!supabase){setStreams([]);return}let live=true;supabase.from("live_streams").select("id,title,creator_name,status").eq("status","live").then(({data,error})=>{if(live){if(error)Alert.alert("Streams unavailable",error.message);else setStreams((data??[]) as Stream[])}});return()=>{live=false}},[session]);
+ async function auth(){if(!supabase)return;if(!email.trim()||password.length<10){Alert.alert("Check details","Enter an email and password of at least 10 characters.");return}setBusy(true);try{const r=register?await supabase.auth.signUp({email:email.trim().toLowerCase(),password,options:{data:{display_name:name.trim()}}}):await supabase.auth.signInWithPassword({email:email.trim().toLowerCase(),password});if(r.error)throw r.error;if(register)Alert.alert("Verify email","Check your email if confirmation is enabled.")}catch(e){Alert.alert("Account error",e instanceof Error?e.message:"Try again")}finally{setBusy(false)}}
+ async function watch(s:Stream){if(!supabase)return;setBusy(true);try{const {data,error}=await supabase.functions.invoke("get-live-playback",{body:{streamId:s.id}});if(error)throw error;if(typeof data?.playbackUrl!=="string"||!data.playbackUrl.startsWith("https://stream.mux.com/"))throw new Error("Invalid playback response");setUri(data.playbackUrl)}catch(e){Alert.alert("Playback error",e instanceof Error?e.message:"Unable to play")}finally{setBusy(false)}}
+ if(!ready)return <SafeAreaView style={st.safe}><ActivityIndicator color="#b8ff45"/></SafeAreaView>;
+ if(!supabase)return <SafeAreaView style={st.safe}><Text style={st.brand}>EXTREME PUMPS</Text><Text style={st.copy}>Backend setup required. Configure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in the build environment. Never add service-role or Mux private keys to the app.</Text></SafeAreaView>;
+ if(!session)return <SafeAreaView style={st.safe}><StatusBar style="light"/><KeyboardAvoidingView style={st.auth} behavior={Platform.OS==="ios"?"padding":undefined}><Text style={st.brand}>EXTREME PUMPS</Text><Text style={st.sub}>ANDROID · NON-ADULT EDITION</Text><Text style={st.head}>{register?"Create account":"Sign in"}</Text>{register&&<TextInput style={st.input} placeholder="Display name" placeholderTextColor="#889" value={name} onChangeText={setName}/>}<TextInput style={st.input} placeholder="Email" placeholderTextColor="#889" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail}/><TextInput style={st.input} placeholder="Password (10+ characters)" placeholderTextColor="#889" secureTextEntry value={password} onChangeText={setPassword}/><Pressable style={st.action} onPress={auth} disabled={busy}><Text style={st.actionText}>{busy?"Please wait":register?"Create account":"Sign in"}</Text></Pressable><Pressable onPress={()=>setRegister(!register)}><Text style={st.link}>{register?"Already have an account? Sign in":"New here? Create account"}</Text></Pressable><Text style={st.copy}>Supabase handles account authentication. Sessions are stored using Android SecureStore.</Text></KeyboardAvoidingView></SafeAreaView>;
+ return <SafeAreaView style={st.safe}><StatusBar style="light"/><View style={st.header}><Text style={st.brand}>EXTREME PUMPS</Text><Pressable onPress={()=>supabase.auth.signOut()}><Text style={st.link}>Sign out</Text></Pressable></View><ScrollView contentContainerStyle={st.body}><Text style={st.head}>Live now</Text><Text style={st.copy}>Authenticated creator streams. Playback links are issued by the server and expire after five minutes.</Text>{uri!==""&&<Player uri={uri}/ >}{busy&&<ActivityIndicator color="#b8ff45"/>}{streams.length===0?<Text style={st.copy}>No active streams right now.</Text>:streams.map(s=><View style={st.card} key={s.id}><View style={{flex:1}}><Text style={st.cardTitle}>{s.title}</Text><Text style={st.copy}>{s.creator_name}</Text></View><Pressable style={st.actionSmall} onPress={()=>watch(s)}><Text style={st.actionText}>Watch</Text></Pressable></View>)}<Text style={st.copy}>Non-adult content only. Reporting, moderation, creator onboarding, age/consent checks, VOD uploads and in-app camera broadcasting still require implementation.</Text></ScrollView></SafeAreaView>
 }
-
-const styles = StyleSheet.create({
-  safe:{flex:1,backgroundColor:"#090b10"},
-  header:{paddingHorizontal:20,paddingTop:18,paddingBottom:16,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},
-  brand:{color:"#f5f7f2",fontSize:23,fontWeight:"900",letterSpacing:1},
-  brandAccent:{color:"#b8ff45"},
-  edition:{color:"#9da5b1",fontSize:10,letterSpacing:1.5,marginTop:4},
-  onlinePill:{borderWidth:1,borderColor:"#657d35",borderRadius:20,paddingHorizontal:10,paddingVertical:6},
-  onlineText:{color:"#c6ff68",fontSize:10,fontWeight:"800"},
-  notice:{marginHorizontal:16,padding:15,borderRadius:14,backgroundColor:"#172015",borderWidth:1,borderColor:"#34472a"},
-  noticeTitle:{color:"#eaffd2",fontSize:16,fontWeight:"800"},
-  noticeText:{color:"#b6c4ad",fontSize:13,lineHeight:19,marginTop:5},
-  tabs:{flexDirection:"row",marginHorizontal:12,marginTop:16,backgroundColor:"#141821",borderRadius:12,padding:4},
-  tab:{flex:1,paddingVertical:10,alignItems:"center",borderRadius:9},
-  activeTab:{backgroundColor:"#b8ff45"},
-  tabText:{color:"#aab2bf",fontSize:12,fontWeight:"700"},
-  activeTabText:{color:"#10150a"},
-  content:{padding:18,paddingBottom:30},
-  heading:{color:"#f5f7f2",fontSize:23,fontWeight:"900",marginBottom:6},
-  subheading:{color:"#aab2bf",fontSize:13,lineHeight:19,marginBottom:16},
-  card:{backgroundColor:"#151a24",borderRadius:15,padding:14,marginBottom:11,flexDirection:"row",alignItems:"center",borderWidth:1,borderColor:"#252d3a"},
-  avatar:{width:44,height:44,borderRadius:22,backgroundColor:"#29351d",alignItems:"center",justifyContent:"center",marginRight:12},
-  avatarText:{color:"#c9ff7b",fontSize:20,fontWeight:"900"},
-  creatorInfo:{flex:1},
-  creatorName:{color:"#fff",fontSize:15,fontWeight:"800"},
-  category:{color:"#c5f27b",fontSize:11,marginTop:2},
-  description:{color:"#aab2bf",fontSize:12,lineHeight:18,marginTop:5},
-  saveButton:{paddingHorizontal:12,paddingVertical:8,borderRadius:9,backgroundColor:"#27351c"},
-  saveText:{color:"#d7ff9e",fontSize:11,fontWeight:"800"},
-  footnote:{color:"#818b99",fontSize:11,lineHeight:17,marginTop:14},
-  empty:{color:"#aab2bf",paddingVertical:22,textAlign:"center"},
-  panel:{backgroundColor:"#151a24",borderRadius:15,padding:17,borderWidth:1,borderColor:"#252d3a"},
-  statusBox:{backgroundColor:"#202631",padding:14,borderRadius:11,marginTop:8},
-  statusTitle:{color:"#f3d38a",fontWeight:"800",marginBottom:5},
-  footer:{padding:12,borderTopWidth:1,borderTopColor:"#252d3a",alignItems:"center"},
-  footerText:{color:"#727d8b",fontSize:9,letterSpacing:1}
-});
+const st=StyleSheet.create({safe:{flex:1,backgroundColor:"#090b10",padding:18},auth:{flex:1,justifyContent:"center",gap:13},header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",paddingVertical:10},brand:{color:"#f5f7f2",fontSize:24,fontWeight:"900"},sub:{color:"#9da5b1",fontSize:10,letterSpacing:1.5},head:{color:"#f5f7f2",fontSize:23,fontWeight:"900",marginVertical:10},input:{backgroundColor:"#151a24",borderColor:"#303948",borderWidth:1,borderRadius:11,padding:15,color:"#fff"},action:{backgroundColor:"#b8ff45",padding:15,borderRadius:11,alignItems:"center"},actionSmall:{backgroundColor:"#b8ff45",padding:11,borderRadius:9},actionText:{color:"#10150a",fontWeight:"900"},link:{color:"#c9ff7b",padding:10,fontWeight:"700"},copy:{color:"#aab2bf",fontSize:13,lineHeight:20,marginVertical:10},body:{paddingBottom:30},card:{backgroundColor:"#151a24",borderRadius:14,padding:14,marginVertical:7,flexDirection:"row",alignItems:"center",gap:10},cardTitle:{color:"#fff",fontWeight:"800",fontSize:15}});
