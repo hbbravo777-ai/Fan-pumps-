@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name":"EXTREME PUMPS",
+    "slug":"extreme-pumps",
+    "version":"0.1.0",
+    "orientation":"portrait",
+    "userInterfaceStyle":"dark",
+    "android":{
+      "package":"com.extremepumps.app",
+      "versionCode":1,
+      "permissions":[],
+      "blockedPermissions":[
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins":[],
+    "extra":{"edition":"non-adult","adultContentEnabled":false}
+  }
+}
